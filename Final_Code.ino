@@ -51,9 +51,13 @@ SoftwareSerial portTwo(6, 7);
 int reverb_effect = 0;
 int distortion_effect = 1;
 int echo_effect = 0;
-int preset = 1;
+int preset = 0;
 int previous_preset = 1;
 int volume = 15;
+int selected = 0;
+int effect_count = 0;
+int effect_on = 0;
+int effect_select = 0;
 
 #define POTENTIOMETER_PIN A0
 
@@ -100,61 +104,164 @@ void setup() {
   pinMode(buttonPinUp, INPUT);
   pinMode(buttonPinDown, INPUT);
   pinMode(selectButtonPin, INPUT);
+
+  selectedLineScreen1 = preset;
+  PRESET1_WINDOW_MAIN(); //Display Preset Screen Window 1
+
+  attachInterrupt(digitalPinToInterrupt(buttonPinUp), countUp, RISING);
+  attachInterrupt(digitalPinToInterrupt(buttonPinDown), countDown, RISING);
+ // attachInterrupt(digitalPinToInterrupt(selectButtonPin), checkSelectButton, RISING);
+  
 }
 
 
 void loop() {
   
-  countUp();
-  countDown();
+
   checkSelectButton();
-  readPotentiometer();
-  
+}
+
+
+void update_preset () {
   if (preset <= 8) {
+
+    if(effect_on == 0) {
+      selectedLineScreen1 = preset;
+      PRESET1_WINDOW_MAIN(); //Display Preset Screen Window 1
+    }
+
+    /*
+    if(preset != previous_preset) {
+      choose_mp3();
+      previous_preset = preset;
+    }
+*/
+    if (selected == 1 && preset < 8 && effect_on == 0) {
+      AUDIO_EFFECTS_WINDOW_MAIN();
+      effect_on = 1;
+    }
+
+    if (effect_on == 1 && effect_count < 9) {
+      selectedLineScreen3 = effect_count;
+      AUDIO_EFFECTS_WINDOW_MAIN();
+
+    }
+    if (effect_on == 1 && effect_select == 1) {
+      if(effect_count == 8) {
+        effect_count = 0;
+        effect_on = 0;
+        effect_select = 0;
+        selected = 0;
+        selectedLineScreen1 = preset;
+        PRESET1_WINDOW_MAIN();
+      }
+      else {
+        choose_mp3();
+        effect_select = 0;
+      }
+      
+
+    }
+    /*
+    else if (selected > 1 && effect_count > ) {
+      selected = 0;
+    }
+*/
+ 
+  }
+
+    // Handles next page press
+  if (preset == 8 && selected == 1) { 
+    preset = 9;
+    selected = 0;
+  }
+  if (preset == 16 && selected == 1) {
+    preset = 0;
+    selected = 0;
     selectedLineScreen1 = preset;
     PRESET1_WINDOW_MAIN(); //Display Preset Screen Window 1
-    
-    if(preset != previous_preset) {
-      choose_mp3();
-      previous_preset = preset;
-    }
   }
-  else if (preset > 8) {
-    selectedLineScreen2 = preset; //15th Preset Highlighted of Preset Window 2
-    PRESET2_WINDOW_MAIN(); //Display Preset Screen Window 2
 
+  if (preset > 8) {
+
+    if(effect_on == 0){
+      selectedLineScreen2 = preset - 1;
+      PRESET2_WINDOW_MAIN(); //Display Preset Screen Window 2
+    }
+    /*
     if(preset != previous_preset) {
       choose_mp3();
       previous_preset = preset;
     }
+    */
+
+    if (selected == 1 && preset > 8 && effect_on == 0) {
+      AUDIO_EFFECTS_WINDOW_MAIN();
+      effect_on = 1;
+    }
+
+    if (effect_on == 1 && effect_count < 9) {
+      selectedLineScreen3 = effect_count;
+      AUDIO_EFFECTS_WINDOW_MAIN();
+
+    }
+    if (effect_on == 1 && effect_select == 1) {
+      if(effect_count == 8) {
+        effect_count = 0;
+        effect_on = 0;
+        effect_select = 0;
+        selected = 0;
+        selectedLineScreen1 = preset;
+        PRESET2_WINDOW_MAIN();
+      }
+      else {
+        choose_mp3();
+        effect_select = 0;
+      }
+
+
   }
   
+  }
+  
+  // Han
 
+  readPotentiometer();
+   setVolume(volume);
 }
+
+
 
 void countUp() {
   //read the state of the pushbutton for counting up:
   buttonStateUp = digitalRead(buttonPinUp);
 
+
   //check if the pushbutton for counting up is pressed:
   if (buttonStateUp == HIGH) {
-    //turn LED on:
    
     //Increase count only if it wasn't already pressed and count is less than 16
-    if (digitalRead(buttonPinUp) == HIGH && count < 15) {
-      count++;
-      preset = count;
+    if (digitalRead(buttonPinUp) == HIGH && preset < 16 && preset != 8 && effect_on != 1) {
+      preset++;
       Serial.print("Count: ");
-      Serial.println(count);
+      Serial.println(preset);
+      update_preset();
       // Wait until the button is released
       while (digitalRead(buttonPinUp) == HIGH) {
         delay(10);
       }
+   
     }
-  } else {
-    //turn LED off:
- 
+    if (digitalRead(buttonPinUp) == HIGH && effect_on == 1 && effect_count < 8) {
+   
+      effect_count++;
+      Serial.print("Effect Count: ");
+      Serial.println(effect_count);
+      update_preset();
+    }
   }
+    
+    
 }
 
 void countDown() {
@@ -166,19 +273,24 @@ void countDown() {
     //turn LED on:
   
     //Decrease count only if it wasn't already pressed and count is greater than 0
-    if (digitalRead(buttonPinDown) == HIGH && count > 0) {
-      count--;
-      preset = count;
+    if (digitalRead(buttonPinDown) == HIGH && preset > 0 && effect_on != 1) {
+      preset--;
       Serial.print("Count: ");
-      Serial.println(count);
+      Serial.println(preset);
+      update_preset();
       //Wait until the button is released
       while (digitalRead(buttonPinDown) == HIGH) {
         delay(10);
       }
+     
     }
-  } else {
-    //turn LED off:
-  
+
+    if (digitalRead(buttonPinDown) == HIGH && effect_on == 1 && effect_count > 0) {
+      effect_count--;
+       Serial.print("Effect Count: ");
+      Serial.println(effect_count);
+      update_preset();
+    }
   }
 }
 
@@ -187,13 +299,24 @@ void checkSelectButton() {
   selectButtonState = digitalRead(selectButtonPin);
 
   //check if the select button is pressed:
-  if (selectButtonState == HIGH) {
-    Serial.println("Select Button has been pressed");
-    delay(50); //debounce delay
+  if (selectButtonState == HIGH && selected != 1) {
+    selected = 1;
+    
+    Serial.print("Select: ");
+    Serial.println(selected);
+   // delay(50); //debounce delay
+    update_preset();
     while (digitalRead(selectButtonPin) == HIGH) {
       delay(10);
     }
+    
   }
+
+  if (selectButtonState == HIGH && selected == 1) {
+    effect_select = 1;
+    update_preset();
+  }
+  
 }
 
 void readPotentiometer() {
@@ -234,35 +357,35 @@ void mp3_play_folder ( uint8_t folder, uint8_t num) {
 
 void choose_mp3() {
         // OG
-        if(reverb_effect == 0 & echo_effect == 0 & distortion_effect == 0) {
+        if(effect_count == 0) {
           mp3_play_folder(preset, 1);
         }
         // Reverb
-        if(reverb_effect == 1 & echo_effect == 0 & distortion_effect == 0) {
+        if(effect_count == 1) {
           mp3_play_folder(preset, 2);
         }
         // Echo
-        else if(reverb_effect == 0 & echo_effect == 1 & distortion_effect == 0) {
+        else if(effect_count == 3) {
           mp3_play_folder(preset, 3);
         }
         // Distortion
-        else if(reverb_effect == 0 & echo_effect == 0 & distortion_effect == 1) {
+        else if(effect_count == 2) {
           mp3_play_folder(preset, 4);
         }
         // Reverb & Echo
-        else if(reverb_effect == 1 & echo_effect == 1 & distortion_effect == 0) {
+        else if(effect_count == 5) {
           mp3_play_folder(preset, 5);
         }
         // Reverb & Distortion
-        else if(reverb_effect == 1 & echo_effect == 0 & distortion_effect == 1) {
+        else if(effect_count == 4) {
           mp3_play_folder(preset, 6);
         }
         // Echo & Distortion
-        else if(reverb_effect == 0 & echo_effect == 1 & distortion_effect == 1) {
+        else if(effect_count == 6) {
           mp3_play_folder(preset, 7);
         }
         // All Effects
-        else if(reverb_effect == 1 & echo_effect == 1 & distortion_effect == 1) {
+        else if(effect_count == 7) {
           mp3_play_folder(preset, 8);
       }
 
@@ -322,11 +445,11 @@ unsigned long PRESET2_WINDOW_MAIN() {
   for (uint8_t i = 0; i < 7; i++) { //Display presets 9 to 15
     String presetText = "PRESET " + String(i + 9); //Starting from Preset 9, Create String Containing Preset Number
     //Call Function to Display Preset Window 2, Preset Text, Line Number, and Highlight Function
-    INIT_PRESET2_WINDOW(presetText.c_str(), i, ((currentScreen == SCREEN_4 || currentScreen == SCREEN_5) && (i + 8) == selectedLineScreen2)); //Adjusted selected line
+    INIT_PRESET2_WINDOW(presetText.c_str(), i,  (i + 8) == selectedLineScreen2); //Adjusted selected line
   }
 
   //Determine highlight condition for "GO TO PRESET 1 WINDOW"
-  bool highlightGoToPreset1 = ((currentScreen == SCREEN_4 || currentScreen == SCREEN_5) && selectedLineScreen2 == 15);
+  bool highlightGoToPreset1 = (selectedLineScreen2 == 15);
 
   //Display "GO TO PRESET 1 WINDOW" at the bottom
   tft.fillRect(10, 220, 300, 25, highlightGoToPreset1 ? ILI9341_YELLOW : ILI9341_GREEN); //Fill Rectangle with Yellow if True, otherwise stay green
@@ -374,7 +497,7 @@ unsigned long AUDIO_EFFECTS_WINDOW_MAIN() {
   }
 
   // Determine highlight condition for "GO BACK TO PRESET WINDOW"
-  bool highlightGoToPresets = (currentScreen == SCREEN_8 && selectedLineScreen3 == 8);
+  bool highlightGoToPresets = ( selectedLineScreen3 == 8);
 
   //Display "GO BACK TO PRESETS WINDOW" at the bottom
   tft.fillRect(10, 220, 300, 25, highlightGoToPresets ? ILI9341_YELLOW : ILI9341_GREEN); //Fill Rectangle with Yellow if True, otherwise stay green
