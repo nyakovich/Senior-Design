@@ -1,3 +1,5 @@
+#include <DFRobotDFPlayerMini.h>
+
 #include <Adafruit_ILI9341.h>
 
 #include <Adafruit_GFX.h>
@@ -5,7 +7,9 @@
 #include <Adafruit_SPITFT.h>
 #include <Adafruit_SPITFT_Macros.h>
 #include <gfxfont.h>
+#include "Arduino.h"
 
+#include "SoftwareSerial.h"
 /////////////////////////////////////////////////////////////////////
 //The Following is the Code Necessary for Implementing the GUI
 //On Preliminary Testing for Verification
@@ -38,22 +42,31 @@ uint8_t selectedLineScreen3; //Set the line to highlight for screen 3
 
 uint8_t currentScreen = SCREEN_1; //Initialize currentScreen with Screen 1
 
-#include "SoftwareSerial.h"
 
 //#include "DFPlayer_Mini_MP3.h"
-SoftwareSerial portTwo(6, 7);
+//SoftwareSerial softSerial(/*rx =*/6, /*tx =*/7);
+#if (defined(ARDUINO_AVR_UNO) || defined(ESP8266))   // Using a soft serial port
+#include <SoftwareSerial.h>
+SoftwareSerial softSerial(/*rx =*/6, /*tx =*/7);
+#define FPSerial softSerial
+#else
+#define FPSerial Serial1
+#endif
+
+//SoftwareSerial portTwo(6, 7);
+/*
 # define Start_Byte 0x7E
 # define Version_Byte 0xFF
 # define Command_Length 0x06
 # define End_Byte 0xEF
 # define Acknowledge 0x00 //Returns info with command 0x41 [0x01: info, 0x00: no info]
-
+*/
 int reverb_effect = 0;
-int distortion_effect = 1;
+int distortion_effect = 0;
 int echo_effect = 0;
 int preset = 0;
 int previous_preset = 1;
-int volume = 15;
+int volume = 20;
 int selected = 0;
 int effect_count = 0;
 int effect_on = 0;
@@ -73,11 +86,34 @@ int count = 0;            //variable to store the count
 //Variable to store the previous percentage value
 int previousvalue = 0;
 
-
+DFRobotDFPlayerMini myDFPlayer;
 //Setup function just to read preliminary Diagnostics
 //Given through Adafruit Test Code from Datasheet (NOT VITAL FOR FINAL CODE IMPLEMENTATION)
 void setup() {
-  Serial.begin(9600); //READ SPI
+  #if (defined ESP32)
+  FPSerial.begin(9600, SERIAL_8N1, /*rx =*/D3, /*tx =*/D2);
+  #else
+  FPSerial.begin(9600);
+  #endif
+
+  Serial.begin(115200);
+
+  Serial.println();
+  Serial.println(F("DFRobot DFPlayer Mini Demo"));
+  Serial.println(F("Initializing DFPlayer ... (May take 3~5 seconds)"));
+  
+  if (!myDFPlayer.begin(FPSerial, /*isACK = */true, /*doReset = */true)) {  //Use serial to communicate with mp3.
+    Serial.println(F("Unable to begin:"));
+    Serial.println(F("1.Please recheck the connection!"));
+    Serial.println(F("2.Please insert the SD card!"));
+    while(true);
+  }
+  Serial.println(F("DFPlayer Mini online."));
+  
+  myDFPlayer.setTimeOut(500); //Set serial communictaion time out 500ms
+
+//  Serial.begin(9600); //READ SPI
+  // Serial.begin(115200);
   Serial.println("ILI9341 Test!"); //PRINT SPI
  
   tft.begin(); //Start Adafruit Screen
@@ -95,31 +131,43 @@ void setup() {
   x = tft.readcommand8(ILI9341_RDSELFDIAG);
   Serial.print("Self Diagnostic: 0x"); Serial.println(x, HEX);
 
+/*
   setVolume(volume);
   choose_mp3();
-  repeat_play();
+ // repeat_play();
+  mp3_play_folder(1,1);
+*/
+
 
 
   //initialize the pushbutton pins as inputs:
-  pinMode(buttonPinUp, INPUT);
-  pinMode(buttonPinDown, INPUT);
-  pinMode(selectButtonPin, INPUT);
+  pinMode(buttonPinUp, INPUT_PULLUP);
+  pinMode(buttonPinDown, INPUT_PULLUP);
+  pinMode(selectButtonPin, INPUT_PULLUP);
 
   selectedLineScreen1 = preset;
   PRESET1_WINDOW_MAIN(); //Display Preset Screen Window 1
 
-  attachInterrupt(digitalPinToInterrupt(buttonPinUp), countUp, RISING);
-  attachInterrupt(digitalPinToInterrupt(buttonPinDown), countDown, RISING);
+  attachInterrupt(digitalPinToInterrupt(buttonPinUp), countUp, LOW);
+  attachInterrupt(digitalPinToInterrupt(buttonPinDown), countDown, LOW);
  // attachInterrupt(digitalPinToInterrupt(selectButtonPin), checkSelectButton, RISING);
   
+  myDFPlayer.volume(volume);  //Set volume value (0~30).
+  myDFPlayer.enableLoop();
+//  myDFPlayer.enableLoopAll();
+ // myDFPlayer.playFolder(2,1); 
+
 }
 
 
 void loop() {
   
-
+  //countUp();
   checkSelectButton();
+  readPotentiometer();
+  myDFPlayer.volume(volume);
 }
+
 
 
 void update_preset () {
@@ -226,28 +274,27 @@ void update_preset () {
   
   // Han
 
-  readPotentiometer();
-   setVolume(volume);
+
 }
 
 
 
 void countUp() {
   //read the state of the pushbutton for counting up:
-  buttonStateUp = digitalRead(buttonPinUp);
+ // buttonStateUp = digitalRead(buttonPinUp);
 
 
   //check if the pushbutton for counting up is pressed:
-  if (buttonStateUp == HIGH) {
+  if (buttonStateUp == LOW) {
    
     //Increase count only if it wasn't already pressed and count is less than 16
-    if (digitalRead(buttonPinUp) == HIGH && preset < 16 && preset != 8 && effect_on != 1) {
+    if (digitalRead(buttonPinUp) == LOW && preset < 16 && preset != 8 && effect_on != 1) {
       preset++;
       Serial.print("Count: ");
       Serial.println(preset);
       update_preset();
       // Wait until the button is released
-      while (digitalRead(buttonPinUp) == HIGH) {
+      while (digitalRead(buttonPinUp) == LOW) {
         delay(10);
       }
    
@@ -269,23 +316,23 @@ void countDown() {
   buttonStateDown = digitalRead(buttonPinDown);
 
   //check if the pushbutton for counting down is pressed:
-  if (buttonStateDown == HIGH) {
+  if (buttonStateDown == LOW) {
     //turn LED on:
   
     //Decrease count only if it wasn't already pressed and count is greater than 0
-    if (digitalRead(buttonPinDown) == HIGH && preset > 0 && effect_on != 1) {
+    if (digitalRead(buttonPinDown) == LOW && preset > 0 && effect_on != 1) {
       preset--;
       Serial.print("Count: ");
       Serial.println(preset);
       update_preset();
       //Wait until the button is released
-      while (digitalRead(buttonPinDown) == HIGH) {
+      while (digitalRead(buttonPinDown) == LOW) {
         delay(10);
       }
      
     }
 
-    if (digitalRead(buttonPinDown) == HIGH && effect_on == 1 && effect_count > 0) {
+    if (digitalRead(buttonPinDown) == LOW && effect_on == 1 && effect_count > 0) {
       effect_count--;
        Serial.print("Effect Count: ");
       Serial.println(effect_count);
@@ -299,20 +346,20 @@ void checkSelectButton() {
   selectButtonState = digitalRead(selectButtonPin);
 
   //check if the select button is pressed:
-  if (selectButtonState == HIGH && selected != 1) {
+  if (selectButtonState == LOW && selected != 1) {
     selected = 1;
     
     Serial.print("Select: ");
     Serial.println(selected);
    // delay(50); //debounce delay
     update_preset();
-    while (digitalRead(selectButtonPin) == HIGH) {
+    while (digitalRead(selectButtonPin) == LOW) {
       delay(10);
     }
     
   }
 
-  if (selectButtonState == HIGH && selected == 1) {
+  if (selectButtonState == LOW && selected == 1) {
     effect_select = 1;
     update_preset();
   }
@@ -340,7 +387,7 @@ void readPotentiometer() {
   delay(100);
 }
 
-
+/*
 void setVolume(int volume)
 {
   execute_CMD(0x06, 0, volume); // Set the volume (0x00~0x30)
@@ -354,39 +401,39 @@ void repeat_play() {
 void mp3_play_folder ( uint8_t folder, uint8_t num) {
 	execute_CMD (0x0F, folder, num);
 }
-
+*/
 void choose_mp3() {
         // OG
         if(effect_count == 0) {
-          mp3_play_folder(preset, 1);
+          myDFPlayer.playFolder(preset, 1);
         }
         // Reverb
         if(effect_count == 1) {
-          mp3_play_folder(preset, 2);
+          myDFPlayer.playFolder(preset, 2);
         }
         // Echo
         else if(effect_count == 3) {
-          mp3_play_folder(preset, 3);
+          myDFPlayer.playFolder(preset, 3);
         }
         // Distortion
         else if(effect_count == 2) {
-          mp3_play_folder(preset, 4);
+          myDFPlayer.playFolder(preset, 4);
         }
         // Reverb & Echo
         else if(effect_count == 5) {
-          mp3_play_folder(preset, 5);
+          myDFPlayer.playFolder(preset, 5);
         }
         // Reverb & Distortion
         else if(effect_count == 4) {
-          mp3_play_folder(preset, 6);
+          myDFPlayer.playFolder(preset, 6);
         }
         // Echo & Distortion
         else if(effect_count == 6) {
-          mp3_play_folder(preset, 7);
+          myDFPlayer.playFolder(preset, 7);
         }
         // All Effects
         else if(effect_count == 7) {
-          mp3_play_folder(preset, 8);
+          myDFPlayer.playFolder(preset, 8);
       }
 
 }
@@ -598,7 +645,7 @@ void INIT_AUDIO_EFFECTS_WINDOW(const char* text, uint8_t lineNumber, bool highli
 
 
 
-
+/*
 void execute_CMD(byte CMD, byte Par1, byte Par2)
 // Excecute the command and parameters
 {
@@ -614,3 +661,4 @@ portTwo.write( Command_line[k]);
 }
 }
 
+*/
