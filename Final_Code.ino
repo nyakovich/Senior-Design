@@ -1,50 +1,25 @@
 #include <DFRobotDFPlayerMini.h>
-
 #include <Adafruit_ILI9341.h>
-
 #include <Adafruit_GFX.h>
 #include <Adafruit_GrayOLED.h>
 #include <Adafruit_SPITFT.h>
 #include <Adafruit_SPITFT_Macros.h>
 #include <gfxfont.h>
 #include "Arduino.h"
-
 #include "SoftwareSerial.h"
-/////////////////////////////////////////////////////////////////////
-//The Following is the Code Necessary for Implementing the GUI
-//On Preliminary Testing for Verification
-//Last Updated 02/10/24
-/////////////////////////////////////////////////////////////////////
-#include "SPI.h" //Include SPI for Serial Communication to Arduino Uno
-//#include "C:\Users\nicho\Documents\Arduino\audio_code\Final_Code\Adafruit_GFX_Library\Adafruit_GFX.h" //Include Adafruit GFX Library
-//#include "C:\Users\nicho\Documents\Arduino\audio_code\Final_Code\Adafruit_ILI9341\Adafruit_ILI9341.h" //Include Adafruit ILI9341 Library
+#include "SPI.h" 
 
-//For the Adafruit shield, these are the default.
 #define TFT_DC 9
 #define TFT_CS 10
+#define POTENTIOMETER_PIN A0
 
 //Use hardware SPI (on Uno, #13, #12, #11) and the above for CS/DC
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC);
-
-//Global variables for each of the test screens for Block Checkoff
-#define SCREEN_1 0
-#define SCREEN_2 1
-#define SCREEN_3 2
-#define SCREEN_4 3
-#define SCREEN_5 4
-#define SCREEN_6 5
-#define SCREEN_7 6
-#define SCREEN_8 7
 
 uint8_t selectedLineScreen1; //Set the line to highlight for screen 1
 uint8_t selectedLineScreen2; //Set the line to highlight for screen 2
 uint8_t selectedLineScreen3; //Set the line to highlight for screen 3
 
-uint8_t currentScreen = SCREEN_1; //Initialize currentScreen with Screen 1
-
-
-//#include "DFPlayer_Mini_MP3.h"
-//SoftwareSerial softSerial(/*rx =*/6, /*tx =*/7);
 #if (defined(ARDUINO_AVR_UNO) || defined(ESP8266))   // Using a soft serial port
 #include <SoftwareSerial.h>
 SoftwareSerial softSerial(/*rx =*/6, /*tx =*/7);
@@ -53,14 +28,7 @@ SoftwareSerial softSerial(/*rx =*/6, /*tx =*/7);
 #define FPSerial Serial1
 #endif
 
-//SoftwareSerial portTwo(6, 7);
-/*
-# define Start_Byte 0x7E
-# define Version_Byte 0xFF
-# define Command_Length 0x06
-# define End_Byte 0xEF
-# define Acknowledge 0x00 //Returns info with command 0x41 [0x01: info, 0x00: no info]
-*/
+// Declare Variables for keeping track of preset
 int reverb_effect = 0;
 int distortion_effect = 0;
 int echo_effect = 0;
@@ -71,8 +39,6 @@ int selected = 0;
 int effect_count = 0;
 int effect_on = 0;
 int effect_select = 0;
-
-#define POTENTIOMETER_PIN A0
 
 //constants won't change. They're used here to set pin numbers:
 const int buttonPinUp = 2;    //the number of the pushbutton pin for counting up
@@ -87,8 +53,7 @@ int count = 0;            //variable to store the count
 int previousvalue = 0;
 
 DFRobotDFPlayerMini myDFPlayer;
-//Setup function just to read preliminary Diagnostics
-//Given through Adafruit Test Code from Datasheet (NOT VITAL FOR FINAL CODE IMPLEMENTATION)
+
 void setup() {
   #if (defined ESP32)
   FPSerial.begin(9600, SERIAL_8N1, /*rx =*/D3, /*tx =*/D2);
@@ -112,8 +77,6 @@ void setup() {
   
   myDFPlayer.setTimeOut(500); //Set serial communictaion time out 500ms
 
-//  Serial.begin(9600); //READ SPI
-  // Serial.begin(115200);
   Serial.println("ILI9341 Test!"); //PRINT SPI
  
   tft.begin(); //Start Adafruit Screen
@@ -131,15 +94,6 @@ void setup() {
   x = tft.readcommand8(ILI9341_RDSELFDIAG);
   Serial.print("Self Diagnostic: 0x"); Serial.println(x, HEX);
 
-/*
-  setVolume(volume);
-  choose_mp3();
- // repeat_play();
-  mp3_play_folder(1,1);
-*/
-
-
-
   //initialize the pushbutton pins as inputs:
   pinMode(buttonPinUp, INPUT_PULLUP);
   pinMode(buttonPinDown, INPUT_PULLUP);
@@ -148,21 +102,16 @@ void setup() {
   selectedLineScreen1 = preset;
   PRESET1_WINDOW_MAIN(); //Display Preset Screen Window 1
 
+  // Attach interrupts for up and down buttons
   attachInterrupt(digitalPinToInterrupt(buttonPinUp), countUp, LOW);
   attachInterrupt(digitalPinToInterrupt(buttonPinDown), countDown, LOW);
- // attachInterrupt(digitalPinToInterrupt(selectButtonPin), checkSelectButton, RISING);
-  
   myDFPlayer.volume(volume);  //Set volume value (0~30).
   myDFPlayer.enableLoop();
-//  myDFPlayer.enableLoopAll();
- // myDFPlayer.playFolder(2,1); 
-
 }
-
 
 void loop() {
   
-  //countUp();
+  // Check select button and update volume if needed
   checkSelectButton();
   readPotentiometer();
   myDFPlayer.volume(volume);
@@ -178,12 +127,6 @@ void update_preset () {
       PRESET1_WINDOW_MAIN(); //Display Preset Screen Window 1
     }
 
-    /*
-    if(preset != previous_preset) {
-      choose_mp3();
-      previous_preset = preset;
-    }
-*/
     if (selected == 1 && preset < 8 && effect_on == 0) {
       AUDIO_EFFECTS_WINDOW_MAIN();
       effect_on = 1;
@@ -207,15 +150,6 @@ void update_preset () {
         choose_mp3();
         effect_select = 0;
       }
-      
-
-    }
-    /*
-    else if (selected > 1 && effect_count > ) {
-      selected = 0;
-    }
-*/
- 
   }
 
     // Handles next page press
@@ -236,12 +170,6 @@ void update_preset () {
       selectedLineScreen2 = preset - 1;
       PRESET2_WINDOW_MAIN(); //Display Preset Screen Window 2
     }
-    /*
-    if(preset != previous_preset) {
-      choose_mp3();
-      previous_preset = preset;
-    }
-    */
 
     if (selected == 1 && preset > 8 && effect_on == 0) {
       AUDIO_EFFECTS_WINDOW_MAIN();
@@ -266,24 +194,12 @@ void update_preset () {
         choose_mp3();
         effect_select = 0;
       }
-
-
-  }
+    }
   
-  }
-  
-  // Han
-
-
+  }  
 }
 
-
-
 void countUp() {
-  //read the state of the pushbutton for counting up:
- // buttonStateUp = digitalRead(buttonPinUp);
-
-
   //check if the pushbutton for counting up is pressed:
   if (buttonStateUp == LOW) {
    
@@ -306,9 +222,7 @@ void countUp() {
       Serial.println(effect_count);
       update_preset();
     }
-  }
-    
-    
+  }   
 }
 
 void countDown() {
@@ -387,21 +301,6 @@ void readPotentiometer() {
   delay(100);
 }
 
-/*
-void setVolume(int volume)
-{
-  execute_CMD(0x06, 0, volume); // Set the volume (0x00~0x30)
-  delay(2000);
-}
-
-void repeat_play() {
-   execute_CMD(0x08,0,2); 
-}
-
-void mp3_play_folder ( uint8_t folder, uint8_t num) {
-	execute_CMD (0x0F, folder, num);
-}
-*/
 void choose_mp3() {
         // OG
         if(effect_count == 0) {
@@ -437,7 +336,6 @@ void choose_mp3() {
       }
 
 }
-
 
 //Main Function for Preset Window 1
 unsigned long PRESET1_WINDOW_MAIN(){
@@ -642,23 +540,3 @@ void INIT_AUDIO_EFFECTS_WINDOW(const char* text, uint8_t lineNumber, bool highli
   tft.setCursor(textX, textY); //Set cursor position for printing text
   tft.print(text); //Print the text inside the rectange
 }
-
-
-
-/*
-void execute_CMD(byte CMD, byte Par1, byte Par2)
-// Excecute the command and parameters
-{
-// Calculate the checksum (2 bytes)
-word checksum = -(Version_Byte + Command_Length + CMD + Acknowledge + Par1 + Par2);
-// Build the command line
-byte Command_line[10] = { Start_Byte, Version_Byte, Command_Length, CMD, Acknowledge,
-Par1, Par2, highByte(checksum), lowByte(checksum), End_Byte};
-//Send the command line to the module
-for (byte k=0; k<10; k++)
-{
-portTwo.write( Command_line[k]);
-}
-}
-
-*/
